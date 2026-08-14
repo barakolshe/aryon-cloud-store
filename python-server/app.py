@@ -1,24 +1,19 @@
-from flask import Flask, jsonify
-from sqlalchemy import create_engine
 import os
 
-app = Flask(__name__)
+from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
-# Database connection
-database_url = os.getenv('DATABASE_URL', 'postgresql://aryon:aryon@localhost:5432/aryondb?sslmode=disable')
-engine = create_engine(database_url)
+app = FastAPI()
 
-
-@app.route('/tenants')
-def get_users():
-    try:
-        with engine.connect() as conn:
-            result = conn.execute('SELECT * FROM tenants')
-            users = [dict(row) for row in result]
-            return jsonify(users)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Read inline for now; this moves into app/core/config.py with the central config issue.
+# No fallback on purpose -- a missing DATABASE_URL should fail loudly at startup.
+database_url = os.environ['DATABASE_URL'].replace('postgresql://', 'postgresql+psycopg://', 1)
+engine = create_async_engine(database_url)
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0')
+@app.get('/tenants')
+async def get_tenants():
+    async with engine.connect() as conn:
+        result = await conn.execute(text('SELECT tenant_id, tenant_name FROM tenants'))
+        return [dict(row._mapping) for row in result]
