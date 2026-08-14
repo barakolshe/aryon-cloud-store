@@ -8,8 +8,11 @@ POST has its own coverage in test_hierarchy_write_integration.py.
 """
 import json
 
+import pytest
 from hierarchy_fixtures import closure_rows, load_fixture, subtree_rows
 from sqlalchemy import event, text
+
+FIXTURE_NAMES = ['1', '2', '3', '4', '5', '6']
 
 INSERT_NODE = text(
     # The cast is not decoration: psycopg sends a Python str as text, and Postgres has no
@@ -47,15 +50,31 @@ async def test_a_stored_hierarchy_comes_back_identical(database_engine, client):
     assert json.dumps(response.json(), sort_keys=True) == json.dumps(hierarchy, sort_keys=True)
 
 
-async def test_every_sample_hierarchy_round_trips(database_engine, client):
-    """Fixture 6 is the one that matters here -- ids in the tens of thousands beside a
+@pytest.mark.parametrize('name', FIXTURE_NAMES)
+async def test_every_sample_hierarchy_round_trips(database_engine, client, name):
+    """All six against the seeded read, not only the ones the write path happens to leave
+    behind. Fixture 6 is the one that matters most -- ids in the tens of thousands beside a
     single-digit one, so any accidental ordering by insertion or by string would show."""
-    hierarchy = load_fixture('6')
+    hierarchy = load_fixture(name)
     await seed(database_engine, hierarchy)
 
     response = await client.get(f'/hierarchy/{hierarchy["id"]}')
 
     assert json.dumps(response.json(), sort_keys=True) == json.dumps(hierarchy, sort_keys=True)
+
+
+async def test_fetching_one_tree_of_several_returns_only_that_tree(database_engine, client):
+    """The stored graph is a forest, and a read is rooted at the node asked for. Fixtures 5
+    and 6 share no ids, so a query that forgot to filter by ancestor would return both trees'
+    rows and assemble something that is neither."""
+    await seed(database_engine, load_fixture('5'))
+    await seed(database_engine, load_fixture('6'))
+
+    response = await client.get('/hierarchy/1')
+
+    assert json.dumps(response.json(), sort_keys=True) == json.dumps(
+        load_fixture('5'), sort_keys=True
+    )
 
 
 async def test_children_come_back_in_ascending_id_order(database_engine, client):
@@ -154,5 +173,14 @@ async def test_one_select_serves_a_whole_subtree(database_engine, client):
 async def test_a_non_numeric_node_id_is_rejected_before_the_database(client):
     """`node_id: int` in the route signature, so this never reaches a query."""
     response = await client.get('/hierarchy/not-a-number')
+
+    assert response.status_code == 422
+
+
+async def test_a_node_id_too_large_for_the_column_is_rejected_before_the_database(client):
+    """A Python int has no upper bound and `nodes.id` is BIGINT. Without the bound on the
+    path parameter this parses as a perfectly good integer, reaches psycopg and raises
+    NumericValueOutOfRange -- a 500 for a request that is simply malformed."""
+    response = await client.get(f'/hierarchy/{2**63}')
 
     assert response.status_code == 422

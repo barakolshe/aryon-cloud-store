@@ -14,7 +14,7 @@ import json
 
 import pytest
 from hierarchy_fixtures import ClosureRow, closure_from_parent_edges, load_fixture
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 FIXTURE_NAMES = ['1', '2', '3', '4', '5', '6']
 
@@ -272,3 +272,114 @@ async def test_a_rejected_payload_names_no_sql(database_engine, client):
     body = response.text.lower()
     assert 'insert' not in body
     assert 'node_closure' not in body
+
+
+async def test_a_changed_type_is_written_over_the_stored_one(database_engine, client):
+    """None of the sample files ever changes a node's type, so nothing else in the suite
+    exercises the `SET type = EXCLUDED.type` half of the upsert -- it could be dropped and
+    every other test would still pass. An upsert that only reconciles shape is not an
+    upsert."""
+    await post(client, tree(1, 'management_group', [tree(2, 'subscription', [])]))
+
+    await post(client, tree(1, 'management_group', [tree(2, 'resource_group', [])]))
+
+    assert (await get(client, 1)).json() == tree(1, 'management_group', [
+        tree(2, 'resource_group', []),
+    ])
+    async with database_engine.connect() as connection:
+        stored_type = await connection.scalar(text('SELECT type FROM nodes WHERE id = 2'))
+    assert stored_type == 'resource_group'
+    await assert_representations_agree(database_engine)
+
+
+async def test_posting_a_new_tree_leaves_an_existing_one_alone(database_engine, client):
+    """What the replay above cannot see. Each fixture is fetched immediately after its own
+    post, and 3 through 5 all root at node 1, so nothing ever re-reads a tree that a later
+    payload does not mention -- a write path that emptied everything outside the payload
+    would replay green, and the parent/closure agreement would still hold on what survived.
+    Fixtures 5 and 6 share no ids, which is what makes this the clean statement of it."""
+    await post(client, load_fixture('5'))
+
+    await post(client, load_fixture('6'))
+
+    assert json.dumps((await get(client, 1)).json(), sort_keys=True) == json.dumps(
+        load_fixture('5'), sort_keys=True
+    ), 'storing a disjoint tree disturbed the one already there'
+    await assert_representations_agree(database_engine)
+
+
+async def test_a_payload_may_invert_a_stored_parent_and_child(database_engine, client):
+    """1 -> 2 -> 3 becomes 1 -> 3 -> 2 in a single request. The sharpest case for the
+    single-statement upsert: node 2's new parent is node 3, whose own row arrives earlier in
+    the same VALUES list while 3 still points at 2 in the database. Nothing may be deleted
+    and no topological sort is available -- only the end-of-statement constraint check makes
+    it land."""
+    await post(client, tree(1, 'management_group', [tree(2, 'subscription', [
+        tree(3, 'resource_group', []),
+    ])]))
+
+    await post(client, tree(1, 'management_group', [tree(3, 'subscription', [
+        tree(2, 'resource_group', []),
+    ])]))
+
+    assert (await get(client, 1)).json() == tree(1, 'management_group', [
+        tree(3, 'subscription', [tree(2, 'resource_group', [])]),
+    ])
+    assert await stored_nodes(database_engine) == {1: None, 3: 1, 2: 3}
+    await assert_representations_agree(database_engine)
+
+
+async def test_a_root_posted_with_no_children_empties_its_subtree(database_engine, client):
+    """The governing rule taken to its limit: a payload of one node removes everything under
+    it. Ten nodes go in one `DELETE`, which is only allowed because the foreign key on
+    `nodes.parent_id` is checked when the statement finishes rather than row by row."""
+    await post(client, load_fixture('5'))
+
+    await post(client, tree(1, 'management_group', []))
+
+    assert (await get(client, 1)).json() == tree(1, 'management_group', [])
+    assert await stored_nodes(database_engine) == {1: None}
+    assert await stored_closure(database_engine) == {ClosureRow(1, 1, 0)}
+    await assert_representations_agree(database_engine)
+
+
+async def test_a_write_takes_the_hierarchy_lock_before_it_mutates(database_engine, client):
+    """`lock_hierarchy_writes` is the whole concurrency story, and nothing else in the suite
+    would notice it being deleted -- a single-threaded test never contends. Asserted
+    structurally instead: the statements Postgres is sent during a POST, in order, with the
+    lock ahead of the first write. Not a race test; see the omissions note in the PR."""
+    statements = []
+
+    def record(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(database_engine.sync_engine, 'before_cursor_execute', record)
+    try:
+        await post(client, load_fixture('5'))
+    finally:
+        event.remove(database_engine.sync_engine, 'before_cursor_execute', record)
+
+    locks = [i for i, statement in enumerate(statements) if 'pg_advisory_xact_lock' in statement]
+    mutations = [
+        i
+        for i, statement in enumerate(statements)
+        if statement.lstrip().upper().startswith(('INSERT', 'UPDATE', 'DELETE'))
+    ]
+
+    assert locks, statements
+    assert mutations, statements
+    assert locks[0] < mutations[0], 'the write mutated rows before taking the lock'
+
+
+async def test_a_node_id_too_large_for_the_column_is_rejected(database_engine, client):
+    """A Python int has no upper bound and `nodes.id` is BIGINT. Unbounded, an id like this
+    validates, reaches psycopg mid-transaction and raises there -- a 500 for a request that
+    is simply malformed. Status code and stored state only: the shape of the body belongs to
+    the error-contract issue."""
+    response = await client.post(
+        '/hierarchy',
+        json=tree(1, 'management_group', [tree(2**63, 'subscription', [])]),
+    )
+
+    assert response.status_code == 422
+    assert await stored_nodes(database_engine) == {}
