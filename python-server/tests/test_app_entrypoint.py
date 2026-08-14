@@ -31,7 +31,20 @@ def test_registered_routes(monkeypatch):
     0.141 `include_router` leaves an `_IncludedRouter` wrapper there, which carries no
     `.path`. The schema is the public view of what the app actually serves."""
     module = import_main(monkeypatch, DATABASE_URL)
-    assert set(module.app.openapi()['paths']) == {'/health', '/hierarchy/{node_id}'}
+    assert set(module.app.openapi()['paths']) == {
+        '/health',
+        '/hierarchy',
+        '/hierarchy/{node_id}',
+    }
+
+
+def test_hierarchy_is_served_by_both_methods(monkeypatch):
+    """The two endpoints the assignment asks for: store at the collection, fetch by id.
+    Asserted on the schema so a router registered but never reached would show up here."""
+    module = import_main(monkeypatch, DATABASE_URL)
+    paths = module.app.openapi()['paths']
+    assert set(paths['/hierarchy']) == {'post'}
+    assert set(paths['/hierarchy/{node_id}']) == {'get'}
 
 
 def test_entrypoint_holds_no_engine(monkeypatch):

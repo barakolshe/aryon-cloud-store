@@ -20,16 +20,18 @@ The database fixtures below are the other half: a dedicated `aryondb_test`, migr
 Alembic once per run and truncated before each test that asks for it.
 """
 import asyncio
+import importlib
 import sys
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # A database of its own, never the one the running stack serves: these tests truncate
 # between cases, and `python tests/run_tests.py` posts hierarchies into the development
@@ -147,3 +149,31 @@ async def database_engine(migrated_database_url):
         await connection.execute(text('TRUNCATE nodes, node_closure'))
     yield engine
     await engine.dispose()
+
+
+def build_client(engine):
+    """The application, with its session dependency pointed at the test database.
+
+    Both modules are imported here rather than at the top of the file so they come from the
+    same generation: `isolate_app_imports` above drops the `app.*` tree around every test,
+    and overriding a `get_session` from an older import would leave the endpoint talking to
+    the real engine.
+    """
+    main = importlib.import_module('app.main')
+    database = importlib.import_module('app.database')
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def session_from_the_test_engine():
+        async with session_factory() as session:
+            yield session
+
+    app = main.create_app()
+    app.dependency_overrides[database.get_session] = session_from_the_test_engine
+    return AsyncClient(transport=ASGITransport(app=app), base_url='http://test')
+
+
+@pytest.fixture
+async def client(database_engine):
+    """An HTTP client onto the real app, talking to the emptied test database."""
+    async with build_client(database_engine) as client:
+        yield client

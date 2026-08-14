@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.controllers.hierarchy import get_hierarchy
+from app.controllers.hierarchy import InvalidHierarchy, get_hierarchy, store_hierarchy
 from app.database import get_session
 from app.schemas.node import HierarchyNode
 
@@ -28,3 +28,21 @@ async def read_hierarchy(node_id: int, session: SessionDependency) -> HierarchyN
     if hierarchy is None:
         raise HTTPException(status_code=404, detail=f'No node with id {node_id}')
     return hierarchy
+
+
+@router.post('/hierarchy', response_model=HierarchyNode)
+async def write_hierarchy(payload: HierarchyNode, session: SessionDependency) -> HierarchyNode:
+    """Store a hierarchy, replacing whatever is currently beneath the nodes it names.
+
+    Answers 200 with the stored subtree rather than an empty body: it costs one indexed read,
+    it proves the write landed, and it hands back the canonical child ordering instead of
+    echoing the request. `tests/run_tests.py` ignores the body, so this is additive.
+
+    409 for a payload that cannot be stored -- a repeated id, or one that would make a node
+    its own ancestor. Decided here for the same reason the 404 above is: the controller
+    reports what is wrong and stays unaware of status codes.
+    """
+    try:
+        return await store_hierarchy(session, payload)
+    except InvalidHierarchy as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
