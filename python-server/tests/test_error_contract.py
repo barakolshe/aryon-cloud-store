@@ -124,8 +124,8 @@ async def test_the_handler_is_registered_on_the_app_not_the_route(monkeypatch):
     its own, and without this test touching the hierarchy endpoints at all.
     """
     monkeypatch.setenv('DATABASE_URL', 'postgresql://aryon:aryon@postgres:5432/aryondb')
-    controllers = importlib.import_module('app.controllers.hierarchy')
-    app = importlib.import_module('app.main').create_app()
+    controllers = importlib.import_module('app.lib.hierarchy')
+    app = importlib.import_module('app.api.main').create_app()
 
     @app.get('/a-route-invented-by-this-test')
     async def raise_invalid_hierarchy() -> None:
@@ -148,7 +148,7 @@ async def test_an_unmapped_failure_still_answers_in_the_same_shape(monkeypatch):
     failure was swallowed. It is not.
     """
     monkeypatch.setenv('DATABASE_URL', 'postgresql://aryon:aryon@postgres:5432/aryondb')
-    app = importlib.import_module('app.main').create_app()
+    app = importlib.import_module('app.api.main').create_app()
 
     @app.get('/a-route-that-breaks')
     async def break_in_a_way_nobody_mapped() -> None:
@@ -175,7 +175,7 @@ async def post_giving_node_2_a_second_parent(client, monkeypatch):
     row breaks no foreign key and no other rule, which leaves the partial unique index as
     the only thing that can refuse it.
     """
-    controllers = importlib.import_module('app.controllers.hierarchy')
+    controllers = importlib.import_module('app.lib.hierarchy')
     correct_closure_rows = controllers.closure_rows
 
     def with_a_second_parent_for_node_2(nodes, captured_ancestors):
@@ -203,7 +203,7 @@ async def test_a_constraint_violation_is_a_409(database_engine, client, monkeypa
     # The same 409 a duplicate id gets, but by a different route -- asserting the wording
     # is what says the database refused this one, rather than the controller having caught
     # it first and made the index irrelevant to the test.
-    errors = importlib.import_module('app.errors')
+    errors = importlib.import_module('app.api.errors')
     assert response.json() == {'detail': errors.INTEGRITY_DETAIL}
     assert await stored_node_ids(database_engine) == set(), 'a refused write left rows behind'
 
@@ -237,7 +237,7 @@ async def test_a_payload_too_deep_to_validate_is_refused_rather_than_a_500(
     Nested past Pydantic's recursion guard, the payload is rejected -- and FastAPI's stock
     422 handler then dies serialising the rejection, because the error it reports carries
     the offending value, which is the whole nested payload. A refused request became a
-    stack trace. The handler in app/errors.py reads the location and the message and never
+    stack trace. The handler in app/api/errors.py reads the location and the message and never
     touches the input, so the refusal stays a refusal.
 
     The exact code is left open on purpose: how deep a payload gets before something gives

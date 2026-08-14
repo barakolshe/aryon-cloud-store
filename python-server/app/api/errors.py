@@ -16,8 +16,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
-from app.controllers.hierarchy import InvalidHierarchy
-from app.schemas.error import ErrorBody
+from app.api.schemas.error import ErrorBody
+from app.lib.hierarchy import InvalidHierarchy
 
 logger = logging.getLogger(__name__)
 

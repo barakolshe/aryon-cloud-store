@@ -1,7 +1,7 @@
 """HTTP surface for the liveness check."""
 from fastapi import APIRouter
 
-from app.schemas.health import HealthStatus
+from app.api.schemas.health import HealthStatus
 
 router = APIRouter()
 

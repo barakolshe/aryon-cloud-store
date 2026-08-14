@@ -10,7 +10,7 @@ UNREACHABLE_URL = 'postgresql://aryon:aryon@no-such-host.invalid:5432/aryondb'
 
 def build_app(monkeypatch, database_url):
     monkeypatch.setenv('DATABASE_URL', database_url)
-    return importlib.import_module('app.main').create_app()
+    return importlib.import_module('app.api.main').create_app()
 
 
 async def get_health(app):

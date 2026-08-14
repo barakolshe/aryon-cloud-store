@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.hierarchy import (
+from app.lib.repositories.hierarchy import (
     SubtreeRow,
     delete_nodes,
     fetch_ancestor_depths,
@@ -15,7 +15,7 @@ from app.repositories.hierarchy import (
     replace_closure,
     upsert_nodes,
 )
-from app.schemas.node import HierarchyNode, NodeType
+from app.lib.types.node import HierarchyNode, NodeType
 
 
 class InvalidHierarchy(Exception):

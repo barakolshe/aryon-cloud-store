@@ -1,4 +1,4 @@
-"""Covers the two pure halves of the write path in app/controllers/hierarchy.py.
+"""Covers the two pure halves of the write path in app/lib/hierarchy.py.
 
 No database and no event loop. `flatten_payload` and `closure_rows` are what decide the
 rows the transaction writes, so getting them under test without a connection is what makes
@@ -9,13 +9,13 @@ import pytest
 from hierarchy_fixtures import closure_rows as closure_rows_of_fixture
 from hierarchy_fixtures import load_fixture
 
-from app.controllers.hierarchy import (
+from app.lib.hierarchy import (
     ClosureRow,
     InvalidHierarchy,
     closure_rows,
     flatten_payload,
 )
-from app.schemas.node import HierarchyNode, NodeType
+from app.lib.types.node import HierarchyNode, NodeType
 
 FIXTURE_NAMES = ['1', '2', '3', '4', '5', '6']
 

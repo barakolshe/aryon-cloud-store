@@ -1,4 +1,4 @@
-"""Covers app/models/node.py and app/models/node_closure.py.
+"""Covers app/lib/models/node.py and app/lib/models/node_closure.py.
 
 These assertions are about `Base.metadata` -- the description of the schema that env.py
 hands Alembic, and that the initial migration mirrors by hand. A model that drifts from the
@@ -17,14 +17,14 @@ TYPE_LABELS = ['management_group', 'subscription', 'resource_group']
 
 @pytest.fixture
 def nodes():
-    return importlib.import_module('app.models.node').Node.__table__
+    return importlib.import_module('app.lib.models.node').Node.__table__
 
 
 @pytest.fixture
 def closure(nodes):
     """Depends on `nodes` because the closure table's foreign keys are strings until the
     table they name is on the same metadata -- the same reason env.py imports both."""
-    return importlib.import_module('app.models.node_closure').NodeClosure.__table__
+    return importlib.import_module('app.lib.models.node_closure').NodeClosure.__table__
 
 
 def indexes_by_name(table):
@@ -44,9 +44,9 @@ def test_both_tables_reach_the_metadata_alembic_diffs():
     """env.py imports these two modules for exactly this side effect. A model missing from
     that import line is invisible to autogenerate, which then writes a migration that drops
     its table."""
-    base = importlib.import_module('app.models.base').Base
-    importlib.import_module('app.models.node')
-    importlib.import_module('app.models.node_closure')
+    base = importlib.import_module('app.lib.models.base').Base
+    importlib.import_module('app.lib.models.node')
+    importlib.import_module('app.lib.models.node_closure')
 
     assert set(base.metadata.tables) == {'nodes', 'node_closure'}
 

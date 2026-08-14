@@ -6,9 +6,9 @@ from sqlalchemy import Row, delete, func, insert, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.node import Node
-from app.models.node_closure import NodeClosure
-from app.schemas.node import NodeType
+from app.lib.models.node import Node
+from app.lib.models.node_closure import NodeClosure
+from app.lib.types.node import NodeType
 
 # What one row of the subtree read carries. Spelled out so callers get attribute names
 # rather than a bare tuple, and so the shape is checkable where it is consumed.

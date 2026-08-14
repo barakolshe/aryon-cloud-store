@@ -1,7 +1,7 @@
 """One row per node in the cloud hierarchy.
 
 `parent_id` is where the shape of the hierarchy lives: every node names its parent, and a
-root names nobody. The closure table in app/models/node_closure.py is a derived index over
+root names nobody. The closure table in app/lib/models/node_closure.py is a derived index over
 this column -- it records no fact that `parent_id` does not already state, and could be
 rebuilt from it at any time. It exists because reading a whole subtree out of `parent_id`
 alone means a recursive CTE, which Postgres plans badly.
@@ -14,8 +14,8 @@ path is what keeps them agreeing -- no constraint can check that for us.
 from sqlalchemy import BigInteger, Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base
-from app.schemas.node import NodeType
+from app.lib.models.base import Base
+from app.lib.types.node import NodeType
 
 
 class Node(Base):
