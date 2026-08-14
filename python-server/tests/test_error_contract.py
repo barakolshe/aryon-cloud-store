@@ -217,34 +217,16 @@ async def test_a_constraint_violation_names_no_sql(database_engine, client, monk
     assert 'uq_node_single_parent' not in response.text
 
 
-async def test_an_id_too_large_to_store_is_rejected_before_the_database(database_engine, client):
-    """`nodes.id` is a BIGINT, so an id past its range is not a 404 or a driver error.
+async def test_a_rejected_path_parameter_reads_like_a_rejected_body(database_engine, client):
+    """FastAPI validates a path parameter and a request body by different routes, and both
+    end at the same handler. That the two agree is what the contract is for -- the status
+    codes themselves are already covered where the endpoints are tested."""
+    response = await client.get(f'/hierarchy/{2**63}')
 
-    Both endpoints, because they take the id by different routes -- one through the path,
-    one through the body -- and an unbounded `int` on either reaches Postgres and comes
-    back as `bigint out of range`, which is a 500.
-    """
-    too_large = 2**63
-
-    read = await client.get(f'/hierarchy/{too_large}')
-    write = await client.post('/hierarchy', json=tree(too_large, 'management_group', []))
-
-    for response in (read, write):
-        assert response.status_code == 422, response.text
-        assert_shared_error_shape(response)
-        assert_names_no_internals(response)
-
-
-async def test_the_largest_storable_id_is_accepted(database_engine, client):
-    """The bound is the column's, so the edge of it still stores and reads back."""
-    largest = 2**63 - 1
-
-    write = await client.post('/hierarchy', json=tree(largest, 'management_group', []))
-    read = await client.get(f'/hierarchy/{largest}')
-
-    assert write.status_code == 200, write.text
-    assert read.status_code == 200, read.text
-    assert read.json() == tree(largest, 'management_group', [])
+    assert response.status_code == 422, response.text
+    assert_shared_error_shape(response)
+    assert_names_no_internals(response)
+    assert 'path.node_id' in response.json()['detail'], response.text
 
 
 async def test_a_payload_too_deep_to_validate_is_refused_rather_than_a_500(

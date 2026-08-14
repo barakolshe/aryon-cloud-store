@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.node import HierarchyNode, NodeType
+from app.schemas.node import NODE_ID_MAX, NODE_ID_MIN, HierarchyNode, NodeType
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / 'tests' / 'objects'
 FIXTURE_FILES = sorted(FIXTURE_DIR.glob('*.json'), key=lambda path: int(path.stem))
@@ -79,6 +79,28 @@ def test_missing_id_is_rejected():
 
 def test_non_integer_id_is_rejected():
     payload = leaf_payload() | {'id': 'root'}
+    with pytest.raises(ValidationError):
+        HierarchyNode.model_validate(payload)
+
+
+@pytest.mark.parametrize('node_id', [NODE_ID_MIN, -1, 0, NODE_ID_MAX])
+def test_an_id_the_column_can_hold_is_accepted(node_id):
+    """Both ends of BIGINT inclusive, and negatives with them: nothing in the assignment says
+    ids are positive, and the column stores them."""
+    assert HierarchyNode.model_validate(leaf_payload() | {'id': node_id}).id == node_id
+
+
+@pytest.mark.parametrize('node_id', [NODE_ID_MIN - 1, NODE_ID_MAX + 1])
+def test_an_id_too_large_for_the_column_is_rejected(node_id):
+    """A Python int is arbitrary precision and the column is not. Unbounded, an id like this
+    validates, reaches psycopg and raises there -- a 500 for what is a malformed request."""
+    with pytest.raises(ValidationError):
+        HierarchyNode.model_validate(leaf_payload() | {'id': node_id})
+
+
+def test_an_id_too_large_for_the_column_is_rejected_in_a_nested_child():
+    """The case a bound applied only to the root would miss."""
+    payload = leaf_payload() | {'children': [leaf_payload() | {'id': NODE_ID_MAX + 1}]}
     with pytest.raises(ValidationError):
         HierarchyNode.model_validate(payload)
 

@@ -3,18 +3,14 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# `nodes.id` is a Postgres BIGINT, so this is the widest id the store can hold. Bounding
-# the schema to the column is what keeps an oversized id a 422 decided here rather than a
-# `bigint out of range` from the driver, which would surface as a 500 -- the same reason
-# the route types its path parameter as an int instead of taking a string and hoping.
-#
-# Ids are client-supplied and never generated, so nothing narrower is safe to assume: the
-# assignment's fixtures use small positive numbers, but nothing in the contract promises
-# that, and rejecting an id the database would have stored is worse than storing it.
-BIGINT_MIN = -(2**63)
-BIGINT_MAX = 2**63 - 1
+# Ids are supplied by the client and land in a BIGINT column, so the contract has to bound
+# them. Left unbounded, a Python int is arbitrary precision and sails through validation only
+# to fail inside psycopg -- which turns a bad request into a 500. Bounds only: nothing says
+# ids are positive, and the column takes negatives happily.
+NODE_ID_MIN = -(2**63)
+NODE_ID_MAX = 2**63 - 1
 
-NodeId = Annotated[int, Field(ge=BIGINT_MIN, le=BIGINT_MAX)]
+NodeId = Annotated[int, Field(ge=NODE_ID_MIN, le=NODE_ID_MAX)]
 
 
 class NodeType(StrEnum):
