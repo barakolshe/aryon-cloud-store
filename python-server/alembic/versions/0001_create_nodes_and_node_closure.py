@@ -46,9 +46,12 @@ def upgrade() -> None:
         sa.Column('type', node_type, nullable=False),
         # NULL for a root. One column, one value, so a node cannot acquire two parents.
         sa.Column('parent_id', sa.BigInteger(), nullable=True),
+        # RESTRICT, not CASCADE: a cascade here is recursive, so one stray DELETE would take
+        # an unbounded part of the hierarchy with it. The write path names every node of a
+        # subtree in one DELETE, which RESTRICT allows; only a partial delete is refused.
         sa.ForeignKeyConstraint(
             ['parent_id'], ['nodes.id'],
-            name='fk_nodes_parent', ondelete='CASCADE',
+            name='fk_nodes_parent', ondelete='RESTRICT',
         ),
         sa.PrimaryKeyConstraint('id'),
     )

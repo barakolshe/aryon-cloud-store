@@ -75,12 +75,20 @@ def test_parent_id_is_a_nullable_self_reference(nodes):
     assert nodes.c.parent_id.nullable is True
     assert foreign_key.column.table.name == 'nodes'
     assert foreign_key.column.name == 'id'
-    assert foreign_key.ondelete == 'CASCADE'
 
 
-def test_parent_id_is_indexed_for_the_cascade(nodes):
+def test_deleting_a_node_out_from_under_its_children_is_refused(nodes):
+    """RESTRICT, not CASCADE. A cascade here is recursive, so one stray DELETE would take an
+    unbounded part of the hierarchy with it and report a single row deleted while doing it.
+    The write path names a whole subtree in one DELETE, which RESTRICT allows."""
+    foreign_key = next(iter(nodes.c.parent_id.foreign_keys))
+
+    assert foreign_key.ondelete == 'RESTRICT'
+
+
+def test_parent_id_is_indexed_for_the_constraint_check(nodes):
     """Postgres does not index the referencing side of a foreign key on its own, so every
-    cascading delete would sequentially scan the table without this."""
+    delete would sequentially scan the table looking for children without this."""
     index = indexes_by_name(nodes)['ix_nodes_parent_id']
 
     assert [column.name for column in index.columns] == ['parent_id']

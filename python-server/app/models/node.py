@@ -46,19 +46,30 @@ class Node(Base):
     # value, so "a node has at most one parent" is structural rather than something the
     # write path has to be trusted with.
     #
-    # ON DELETE CASCADE is recursive: deleting one node removes everything below it, however
-    # deep. The upsert path relies on that, but it also means an insert has to name a parent
-    # that exists -- payload rows go in one statement, where Postgres checks foreign keys
-    # only once the statement finishes and order within it stops mattering.
+    # RESTRICT rather than CASCADE, deliberately. Cascading here is recursive, so one
+    # mistyped DELETE would take an arbitrary amount of the hierarchy with it -- and report
+    # "DELETE 1" while doing it. RESTRICT costs the write path nothing, because it already
+    # works out the full set of nodes to remove from the closure before removing any of
+    # them: naming every node of a subtree in one DELETE satisfies RESTRICT, since the check
+    # runs when the statement finishes rather than row by row. Only a partial delete, which
+    # would orphan the rows it leaves behind, is refused.
+    #
+    # It does impose an order: a node the request moves out of a subtree that is going away
+    # has to be re-parented before the delete, not after. Under CASCADE that node was
+    # silently deleted and re-inserted, which holds only while every column here is restated
+    # by the request -- the first column that is not would be lost on every move.
+    #
+    # End-of-statement checking also means an INSERT may name a parent that appears further
+    # down the same statement, so a payload goes in as one INSERT with no topological sort.
     parent_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey('nodes.id', ondelete='CASCADE', name='fk_nodes_parent'),
+        ForeignKey('nodes.id', ondelete='RESTRICT', name='fk_nodes_parent'),
         nullable=True,
     )
 
     __table_args__ = (
         # Postgres does not index the referencing side of a foreign key on its own, and the
-        # cascade above has to find a node's children on every delete. Unindexed, that is a
-        # sequential scan of this table per deleted row.
+        # constraint above has to look for a node's children on every delete. Unindexed,
+        # that is a sequential scan of this table per deleted row.
         Index('ix_nodes_parent_id', 'parent_id'),
     )

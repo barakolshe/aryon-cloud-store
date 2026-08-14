@@ -26,8 +26,10 @@ class NodeClosure(Base):
 
     __tablename__ = 'node_closure'
 
-    # ON DELETE CASCADE both ways: deleting a node takes its closure rows with it, so the
-    # write path can delete from `nodes` alone and never leave a row pointing at nothing.
+    # ON DELETE CASCADE both ways, unlike nodes.parent_id, which restricts: these rows are
+    # bookkeeping about a node rather than data of their own, so they should follow it out.
+    # It lets the write path delete from `nodes` alone and never leave a row pointing at
+    # nothing, and it cannot lose anything that was not derived in the first place.
     ancestor_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey('nodes.id', ondelete='CASCADE', name='fk_node_closure_ancestor'),
