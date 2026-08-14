@@ -11,13 +11,14 @@ from fastapi import FastAPI
 # routers below reach app.database on their own once endpoints query it, but relying on
 # that would tie fail-fast startup to which endpoints happen to exist today.
 from app import database  # noqa: F401
-from app.routes import health
+from app.routes import health, hierarchy
 
 
 def create_app() -> FastAPI:
     """Assemble the application."""
     app = FastAPI()
     app.include_router(health.router)
+    app.include_router(hierarchy.router)
     return app
 
 
