@@ -1,0 +1,30 @@
+[project]
+name = "cloudstore-server"
+version = "0.1.0"
+description = "CloudStore hierarchy API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "psycopg[binary,pool]",
+    "alembic",
+    "pydantic>=2",
+    "pydantic-settings",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+
+# Nothing here is installed as a library -- the server is run from the source tree,
+# so uv only has to manage the environment.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
