@@ -5,7 +5,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 
-RELOADABLE_MODULES = ('app.main', 'app.core.config')
+RELOADABLE_MODULES = ('app.main', 'app.config')
 DATABASE_URL = 'postgresql://aryon:aryon@postgres:5432/aryondb'
 
 

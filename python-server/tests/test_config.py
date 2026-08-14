@@ -1,11 +1,11 @@
-"""Covers app/core/config.py -- the only module allowed to read the environment."""
+"""Covers app/config.py -- the only module allowed to read the environment."""
 import importlib
 import sys
 
 import pytest
 from pydantic import ValidationError
 
-CONFIG_MODULE = 'app.core.config'
+CONFIG_MODULE = 'app.config'
 PLAIN_URL = 'postgresql://aryon:aryon@postgres:5432/aryondb'
 ASYNC_URL = 'postgresql+psycopg://aryon:aryon@postgres:5432/aryondb'
 
