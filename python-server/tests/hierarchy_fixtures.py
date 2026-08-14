@@ -94,6 +94,11 @@ def closure_from_parent_edges(parents: Mapping[int, int | None]) -> set[ClosureR
         depth = 1
         while ancestor is not None:
             rows.add(ClosureRow(ancestor, node_id, depth))
+            # Nothing in the schema forbids a cycle in `parent_id` -- the self-referencing
+            # foreign key is satisfied by 1 -> 2 -> 1. A walk with no bound would spin here
+            # forever, so the suite would hang on exactly the corruption this oracle exists
+            # to catch. A chain can visit each stored node at most once.
+            assert depth <= len(parents), f'nodes.parent_id has a cycle above node {node_id}'
             ancestor = parents[ancestor]
             depth += 1
 

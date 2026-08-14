@@ -1,6 +1,16 @@
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+# Ids are supplied by the client and land in a BIGINT column, so the contract has to bound
+# them. Left unbounded, a Python int is arbitrary precision and sails through validation only
+# to fail inside psycopg -- which turns a bad request into a 500. Bounds only: nothing says
+# ids are positive, and the column takes negatives happily.
+NODE_ID_MIN = -(2**63)
+NODE_ID_MAX = 2**63 - 1
+
+NodeId = Annotated[int, Field(ge=NODE_ID_MIN, le=NODE_ID_MAX)]
 
 
 class NodeType(StrEnum):
@@ -26,7 +36,7 @@ class HierarchyNode(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    id: int
+    id: NodeId
     type: NodeType
     children: list['HierarchyNode']
 
