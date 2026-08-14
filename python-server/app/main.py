@@ -1,15 +1,12 @@
-import os
-
 from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.core.config import settings
+
 app = FastAPI()
 
-# Read inline for now; this moves into app/core/config.py with the central config issue.
-# No fallback on purpose -- a missing DATABASE_URL should fail loudly at startup.
-database_url = os.environ['DATABASE_URL'].replace('postgresql://', 'postgresql+psycopg://', 1)
-engine = create_async_engine(database_url)
+engine = create_async_engine(settings.database_url)
 
 
 @app.get('/tenants')
