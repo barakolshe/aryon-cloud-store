@@ -73,6 +73,15 @@ def test_nodes_table_is_keyed_by_id(upgrade_sql):
     assert 'PRIMARY KEY (id)' in upgrade_sql
 
 
+def test_parent_id_is_a_nullable_cascading_self_reference(upgrade_sql):
+    """The column the hierarchy's shape is stored in. Nullable because roots have no
+    parent, and cascading so a deleted node takes its subtree with it."""
+    assert 'parent_id BIGINT' in upgrade_sql
+    assert 'parent_id BIGINT NOT NULL' not in upgrade_sql
+    assert 'FOREIGN KEY(parent_id) REFERENCES nodes (id) ON DELETE CASCADE' in upgrade_sql
+    assert 'CREATE INDEX ix_nodes_parent_id ON nodes (parent_id)' in upgrade_sql
+
+
 def test_closure_rows_cascade_from_their_node(upgrade_sql):
     assert 'CREATE TABLE node_closure' in upgrade_sql
     assert 'PRIMARY KEY (ancestor_id, descendant_id)' in upgrade_sql

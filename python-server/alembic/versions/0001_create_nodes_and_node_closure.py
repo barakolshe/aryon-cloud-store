@@ -44,8 +44,18 @@ def upgrade() -> None:
         # overrides.
         sa.Column('id', sa.BigInteger(), autoincrement=False, nullable=False),
         sa.Column('type', node_type, nullable=False),
+        # NULL for a root. One column, one value, so a node cannot acquire two parents.
+        sa.Column('parent_id', sa.BigInteger(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ['parent_id'], ['nodes.id'],
+            name='fk_nodes_parent', ondelete='CASCADE',
+        ),
         sa.PrimaryKeyConstraint('id'),
     )
+
+    # Postgres does not index the referencing side of a foreign key, and the cascade above
+    # looks children up on every delete. Unindexed, each deleted row scans the table.
+    op.create_index('ix_nodes_parent_id', 'nodes', ['parent_id'])
 
     op.create_table(
         'node_closure',
@@ -88,6 +98,7 @@ def downgrade() -> None:
     op.drop_index('uq_node_single_parent', table_name='node_closure')
     op.drop_index('ix_closure_descendant_depth', table_name='node_closure')
     op.drop_table('node_closure')
+    op.drop_index('ix_nodes_parent_id', table_name='nodes')
     op.drop_table('nodes')
     # The type belongs to the schema, not to the table that uses it, so it survives
     # DROP TABLE and has to go explicitly.

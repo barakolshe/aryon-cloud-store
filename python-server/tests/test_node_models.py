@@ -67,6 +67,26 @@ def test_node_type_is_a_native_enum_of_the_api_values(nodes):
     assert nodes.c.type.nullable is False
 
 
+def test_parent_id_is_a_nullable_self_reference(nodes):
+    """NULL for a root, and a column holds one value -- which is what makes "at most one
+    parent" structural rather than something the write path has to be trusted with."""
+    foreign_key = next(iter(nodes.c.parent_id.foreign_keys))
+
+    assert nodes.c.parent_id.nullable is True
+    assert foreign_key.column.table.name == 'nodes'
+    assert foreign_key.column.name == 'id'
+    assert foreign_key.ondelete == 'CASCADE'
+
+
+def test_parent_id_is_indexed_for_the_cascade(nodes):
+    """Postgres does not index the referencing side of a foreign key on its own, so every
+    cascading delete would sequentially scan the table without this."""
+    index = indexes_by_name(nodes)['ix_nodes_parent_id']
+
+    assert [column.name for column in index.columns] == ['parent_id']
+    assert not index.unique
+
+
 def test_closure_is_keyed_by_the_ancestor_descendant_pair(closure):
     assert [column.name for column in closure.primary_key] == ['ancestor_id', 'descendant_id']
     assert isinstance(closure.c.depth.type, Integer)
@@ -96,8 +116,9 @@ def test_descendant_index_covers_the_read_path(closure):
     assert not index.unique
 
 
-def test_a_node_can_have_at_most_one_parent(closure):
-    """The partial unique index is the forest guarantee: one depth-1 row per node."""
+def test_the_derived_closure_cannot_record_two_parents_either(closure):
+    """nodes.parent_id is the single-parent guarantee; this index checks the derived copy
+    agrees that there is only one, by rejecting a second depth-1 row for the same node."""
     index = indexes_by_name(closure)['uq_node_single_parent']
     assert [column.name for column in index.columns] == ['descendant_id']
     assert index.unique

@@ -1,10 +1,17 @@
 """One row per node in the cloud hierarchy.
 
-The table holds only what a node *is*. Where it sits in the hierarchy is recorded
-separately, in `app/models/node_closure.py`, so moving a subtree never rewrites the nodes
-themselves.
+`parent_id` is where the shape of the hierarchy lives: every node names its parent, and a
+root names nobody. The closure table in app/models/node_closure.py is a derived index over
+this column -- it records no fact that `parent_id` does not already state, and could be
+rebuilt from it at any time. It exists because reading a whole subtree out of `parent_id`
+alone means a recursive CTE, which Postgres plans badly.
+
+Keeping the parent here rather than reading it back out of the closure's depth-1 rows is
+what holds the read path to a single join: the row already being fetched for `type` carries
+the parent with it. Both representations are written in the same transaction, and the write
+path is what keeps them agreeing -- no constraint can check that for us.
 """
-from sqlalchemy import BigInteger, Enum
+from sqlalchemy import BigInteger, Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -33,4 +40,25 @@ class Node(Base):
             values_callable=lambda enum: [member.value for member in enum],
         ),
         nullable=False,
+    )
+
+    # NULL for a root, which is why this is the one nullable column here. A column holds one
+    # value, so "a node has at most one parent" is structural rather than something the
+    # write path has to be trusted with.
+    #
+    # ON DELETE CASCADE is recursive: deleting one node removes everything below it, however
+    # deep. The upsert path relies on that, but it also means an insert has to name a parent
+    # that exists -- payload rows go in one statement, where Postgres checks foreign keys
+    # only once the statement finishes and order within it stops mattering.
+    parent_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey('nodes.id', ondelete='CASCADE', name='fk_nodes_parent'),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        # Postgres does not index the referencing side of a foreign key on its own, and the
+        # cascade above has to find a node's children on every delete. Unindexed, that is a
+        # sequential scan of this table per deleted row.
+        Index('ix_nodes_parent_id', 'parent_id'),
     )
