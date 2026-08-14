@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 host = 'localhost'
-port = '8080'
+port = '8081'
 endpoint = 'hierarchy'
 
 
@@ -63,9 +63,12 @@ class CloudHierarchyTest:
         return json.dumps(original, sort_keys=True) == json.dumps(retrieved, sort_keys=True)
 
 
-def run_tests() -> None:
+def run_tests() -> bool:
     """
     Run tests for all JSON files in the test_data directory.
+
+    Returns:
+        True if every test passed
     """
     tester = CloudHierarchyTest()
     test_files = sorted(
@@ -104,6 +107,11 @@ def run_tests() -> None:
         except Exception as e:
             print(f"❌ Test failed with error: {str(e)}")
 
+    print(f"\nPassed {passed_tests}/{total_tests} tests")
+    return passed_tests == total_tests
+
 
 if __name__ == "__main__":
-    run_tests()
+    # Non-zero on any failure: nothing else runs this suite, so a green exit code is the
+    # only signal that the run was clean.
+    raise SystemExit(0 if run_tests() else 1)
