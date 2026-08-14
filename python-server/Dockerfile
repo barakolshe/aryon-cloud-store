@@ -14,4 +14,10 @@ COPY . .
 
 EXPOSE 8081
 
-CMD ["uv", "run", "--frozen", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8081"]
+# Migrate, then serve. Running the migrations here rather than in a separate service keeps
+# the schema and the code that expects it in one deployable unit: the server cannot come up
+# against a schema it does not match, because a failed `upgrade` stops the container. `exec`
+# hands the process over to uvicorn so it still receives docker's stop signal.
+# A shell string rather than an entrypoint script -- a script file needs an executable bit
+# that a Windows checkout does not reliably carry.
+CMD ["sh", "-c", "uv run --frozen --no-dev alembic upgrade head && exec uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8081"]

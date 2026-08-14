@@ -10,6 +10,16 @@ services:
       POSTGRES_DB: aryondb
     ports:
       - "5432:5432"
+    healthcheck:
+      # The API container runs `alembic upgrade head` before uvicorn, so it needs Postgres
+      # accepting connections, not merely created. -h 127.0.0.1 forces the check over TCP:
+      # during initdb the entrypoint runs a temporary server on the unix socket only, and a
+      # socket check would report ready while the real server is still down.
+      test: ["CMD-SHELL", "pg_isready -U aryon -d aryondb -h 127.0.0.1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     networks:
       - aryon-network
 
@@ -23,7 +33,10 @@ services:
     environment:
       DATABASE_URL: postgresql://aryon:aryon@postgres:5432/aryondb?sslmode=disable
     depends_on:
-      - postgres
+      postgres:
+        # Not the plain list form: that waits only for the container to be created, which
+        # the migrations would then race and lose, taking this container down with them.
+        condition: service_healthy
     networks:
       - aryon-network
 
