@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.controllers.hierarchy import InvalidHierarchy, get_hierarchy, store_hierarchy
+from app.controllers.hierarchy import get_hierarchy, store_hierarchy
 from app.database import get_session
 from app.schemas.node import NODE_ID_MAX, NODE_ID_MIN, HierarchyNode
 
@@ -27,9 +27,9 @@ async def read_hierarchy(node_id: NodeIdPath, session: SessionDependency) -> Hie
 
     The typed path parameter is what makes a non-numeric or out-of-range id a 422 from
     FastAPI rather than a database error, and an empty read a 404 rather than an empty
-    object. The status code is decided here because this is the layer that speaks HTTP --
-    the controller reports "no such node" by returning None and stays unaware of response
-    codes.
+    object. The 404 is raised here because this is the layer that speaks HTTP -- the
+    controller reports "no such node" by returning None and stays unaware of response
+    codes. Everything else this endpoint can answer with is mapped in app/errors.py.
     """
     hierarchy = await get_hierarchy(session, node_id)
     if hierarchy is None:
@@ -45,11 +45,8 @@ async def write_hierarchy(payload: HierarchyNode, session: SessionDependency) ->
     it proves the write landed, and it hands back the canonical child ordering instead of
     echoing the request. `tests/run_tests.py` ignores the body, so this is additive.
 
-    409 for a payload that cannot be stored -- a repeated id, or one that would make a node
-    its own ancestor. Decided here for the same reason the 404 above is: the controller
-    reports what is wrong and stays unaware of status codes.
+    No `try/except`. `InvalidHierarchy` from the controller and `IntegrityError` from the
+    driver both become 409s, decided in app/errors.py -- so the mapping is stated once for
+    the app instead of once per route that can raise them.
     """
-    try:
-        return await store_hierarchy(session, payload)
-    except InvalidHierarchy as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+    return await store_hierarchy(session, payload)
