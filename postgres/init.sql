@@ -1,13 +1,10 @@
--- Create tenant table (just for the example)
-CREATE TABLE tenants (
-                       tenant_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                       tenant_name VARCHAR(255) UNIQUE NOT NULL
-);
-
--- Insert some sample data
-INSERT INTO tenants (tenant_name)
-VALUES
-    ('microsoft'),
-    ('amazon'),
-    ('google');
-
+-- Intentionally empty.
+--
+-- This file ran only when the data directory was empty, which made it a poor place for
+-- a schema: editing it had no effect on a database that already existed. The hierarchy
+-- tables are created by Alembic migrations instead, which run on every container start
+-- and are versioned alongside the code.
+--
+-- The `tenants` table that used to live here was the assignment's mock reference table.
+-- It was never part of the domain -- no relationship to the hierarchy, and the README
+-- describes it as "1 mock table for reference" -- so it has been removed.

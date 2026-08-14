@@ -28,3 +28,6 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Every endpoint is a coroutine, so most tests are too. "auto" runs them without a
+# per-test marker, which keeps the marker from being the thing someone forgets.
+asyncio_mode = "auto"

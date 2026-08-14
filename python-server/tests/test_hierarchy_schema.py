@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from schemas.node import HierarchyNode, NodeType
+from app.schemas.node import HierarchyNode, NodeType
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / 'tests' / 'objects'
 FIXTURE_FILES = sorted(FIXTURE_DIR.glob('*.json'), key=lambda path: int(path.stem))
