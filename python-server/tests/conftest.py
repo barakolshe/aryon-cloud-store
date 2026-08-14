@@ -1,16 +1,16 @@
 """Shared test setup.
 
 Several suites re-import the app package to exercise import-time behaviour: the engine is
-built when `app.database` is imported, and the settings when `app.config` is, so a test
+built when `app.lib.database` is imported, and the settings when `app.config` is, so a test
 that wants a different environment has to get a fresh import.
 
 Clearing the leaf modules alone is not enough, and fails in a way that is easy to misread.
-`from app.routes import health` in app/main.py reads the attribute the `app.routes`
-package object still holds, so a surviving package hands back the *previous* submodule
-while `import_module` builds a new one. The app then wires itself from one copy while a
-test holds the other, which surfaces as a dependency override that silently does not
-apply -- the endpoint reaches the real database instead of the stub. Dropping the whole
-`app.*` tree keeps the two in step.
+`from app.api.routes import health` in app/api/main.py reads the attribute the
+`app.api.routes` package object still holds, so a surviving package hands back the
+*previous* submodule while `import_module` builds a new one. The app then wires itself
+from one copy while a test holds the other, which surfaces as a dependency override that
+silently does not apply -- the endpoint reaches the real database instead of the stub.
+Dropping the whole `app.*` tree keeps the two in step.
 
 Modules already imported at collection time stay usable: a class removed from sys.modules
 keeps working through the references its functions hold, so the bound names in a test
@@ -159,8 +159,8 @@ def build_client(engine):
     and overriding a `get_session` from an older import would leave the endpoint talking to
     the real engine.
     """
-    main = importlib.import_module('app.main')
-    database = importlib.import_module('app.database')
+    main = importlib.import_module('app.api.main')
+    database = importlib.import_module('app.lib.database')
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def session_from_the_test_engine():

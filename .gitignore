@@ -10,8 +10,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored to the repo root: these name setuptools build output, and unanchored they
+# would match any directory so named at any depth -- python-server/app/lib/ among them.
+/lib/
+/lib64/
 parts/
 sdist/
 var/

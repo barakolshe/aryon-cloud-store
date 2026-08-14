@@ -18,12 +18,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.config import settings
-from app.models.base import Base
+from app.lib.models.base import Base
 
 # Imported for the side effect of registering their tables on Base.metadata. A model that
 # is not reachable from here is invisible to autogenerate, which then cheerfully writes a
 # migration dropping its table. Every new model module gets added to this line.
-from app.models import node, node_closure  # noqa: F401
+from app.lib.models import node, node_closure  # noqa: F401
 
 config = context.config
 

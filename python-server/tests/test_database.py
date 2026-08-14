@@ -1,4 +1,4 @@
-"""Covers app/database.py -- the engine, the session factory, and the DI dependency.
+"""Covers app/lib/database.py -- the engine, the session factory, and the DI dependency.
 
 Nothing here touches Postgres: the engine only dials out on the first query, and a
 session does not connect when it is opened. That laziness is exactly what these tests
@@ -15,13 +15,13 @@ PLAIN_URL = 'postgresql://aryon:aryon@postgres:5432/aryondb'
 
 @pytest.fixture
 def database(monkeypatch):
-    """A fresh app.database, built from this test's environment by conftest isolation."""
+    """A fresh app.lib.database, built from this test's environment by conftest isolation."""
     monkeypatch.setenv('DATABASE_URL', PLAIN_URL)
-    return importlib.import_module('app.database')
+    return importlib.import_module('app.lib.database')
 
 
 def test_plain_postgresql_url_is_driven_by_async_psycopg(database):
-    """Relocated from the entrypoint test when the engine moved out of app/main.py."""
+    """Relocated from the entrypoint test when the engine moved out of app/api/main.py."""
     assert database.engine.url.drivername == 'postgresql+psycopg'
 
 
@@ -65,4 +65,4 @@ async def test_get_session_closes_the_session_afterwards(database, monkeypatch):
 def test_missing_database_url_fails_at_import(monkeypatch):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     with pytest.raises(RuntimeError, match='DATABASE_URL'):
-        importlib.import_module('app.database')
+        importlib.import_module('app.lib.database')

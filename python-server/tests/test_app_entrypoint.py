@@ -1,4 +1,4 @@
-"""Covers the uvicorn entrypoint the Dockerfile serves: `uv run uvicorn app.main:app`.
+"""Covers the uvicorn entrypoint the Dockerfile serves: `uv run uvicorn app.api.main:app`.
 
 The per-test import isolation these tests rely on comes from conftest.py.
 """
@@ -12,7 +12,7 @@ DATABASE_URL = 'postgresql://aryon:aryon@postgres:5432/aryondb'
 
 def import_main(monkeypatch, database_url):
     monkeypatch.setenv('DATABASE_URL', database_url)
-    return importlib.import_module('app.main')
+    return importlib.import_module('app.api.main')
 
 
 def test_app_attribute_is_an_asgi_app(monkeypatch):
@@ -27,7 +27,7 @@ def test_create_app_builds_a_fresh_instance(monkeypatch):
 
 
 def test_registered_routes(monkeypatch):
-    """Read the paths off the OpenAPI schema rather than app.routes: since FastAPI
+    """Read the paths off the OpenAPI schema rather than app.api.routes: since FastAPI
     0.141 `include_router` leaves an `_IncludedRouter` wrapper there, which carries no
     `.path`. The schema is the public view of what the app actually serves."""
     module = import_main(monkeypatch, DATABASE_URL)
@@ -48,7 +48,7 @@ def test_hierarchy_is_served_by_both_methods(monkeypatch):
 
 
 def test_entrypoint_holds_no_engine(monkeypatch):
-    """The engine lives in app.database now. Guards the split from quietly regressing."""
+    """The engine lives in app.lib.database now. Guards the split from quietly regressing."""
     module = import_main(monkeypatch, DATABASE_URL)
     assert not hasattr(module, 'engine')
 
@@ -56,4 +56,4 @@ def test_entrypoint_holds_no_engine(monkeypatch):
 def test_missing_database_url_fails_at_import(monkeypatch):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     with pytest.raises(RuntimeError, match='DATABASE_URL'):
-        importlib.import_module('app.main')
+        importlib.import_module('app.api.main')

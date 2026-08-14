@@ -20,4 +20,4 @@ EXPOSE 8081
 # hands the process over to uvicorn so it still receives docker's stop signal.
 # A shell string rather than an entrypoint script -- a script file needs an executable bit
 # that a Windows checkout does not reliably carry.
-CMD ["sh", "-c", "uv run --frozen --no-dev alembic upgrade head && exec uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8081"]
+CMD ["sh", "-c", "uv run --frozen --no-dev alembic upgrade head && exec uv run --frozen --no-dev uvicorn app.api.main:app --host 0.0.0.0 --port 8081"]

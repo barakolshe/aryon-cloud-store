@@ -18,7 +18,7 @@ hot path.
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base
+from app.lib.models.base import Base
 
 
 class NodeClosure(Base):

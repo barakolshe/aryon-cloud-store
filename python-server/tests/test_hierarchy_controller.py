@@ -1,4 +1,4 @@
-"""Covers the tree assembly in app/controllers/hierarchy.py.
+"""Covers the tree assembly in app/lib/hierarchy.py.
 
 No database and no event loop: `assemble_tree` is a pure function over the rows the
 repository returns, which is what makes the interesting cases -- ordering, a leaf, a
@@ -8,7 +8,7 @@ import json
 
 from hierarchy_fixtures import SubtreeRow, load_fixture, subtree_rows
 
-from app.controllers.hierarchy import assemble_tree
+from app.lib.hierarchy import assemble_tree
 
 
 def test_assembles_a_stored_hierarchy_back_into_the_posted_shape():
