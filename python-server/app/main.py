@@ -1,16 +1,21 @@
+"""The ASGI entrypoint: builds the app and registers routers, and nothing else.
+
+No engine and no SQL live here. Each router carries its own wiring, so adding an
+endpoint means adding a module and one `include_router` line.
+"""
 from fastapi import FastAPI
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import settings
-
-app = FastAPI()
-
-engine = create_async_engine(settings.database_url)
+from app.routes import health, tenants
 
 
-@app.get('/tenants')
-async def get_tenants():
-    async with engine.connect() as conn:
-        result = await conn.execute(text('SELECT tenant_id, tenant_name FROM tenants'))
-        return [dict(row._mapping) for row in result]
+def create_app() -> FastAPI:
+    """Assemble the application."""
+    app = FastAPI()
+    app.include_router(health.router)
+    app.include_router(tenants.router)
+    return app
+
+
+# The Dockerfile serves `uvicorn app.main:app`, so the module exposes one built instance
+# alongside the factory that tests call to get an isolated app.
+app = create_app()
