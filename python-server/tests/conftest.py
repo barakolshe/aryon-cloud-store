@@ -5,10 +5,10 @@ built when `app.database` is imported, and the settings when `app.config` is, so
 that wants a different environment has to get a fresh import.
 
 Clearing the leaf modules alone is not enough, and fails in a way that is easy to misread.
-`from app.routes import tenants` in app/main.py reads the attribute the `app.routes`
+`from app.routes import health` in app/main.py reads the attribute the `app.routes`
 package object still holds, so a surviving package hands back the *previous* submodule
-while `import_module` builds a new one. The app then wires itself from one copy and the
-test overrides the other, which surfaces as a dependency override that silently does not
+while `import_module` builds a new one. The app then wires itself from one copy while a
+test holds the other, which surfaces as a dependency override that silently does not
 apply -- the endpoint reaches the real database instead of the stub. Dropping the whole
 `app.*` tree keeps the two in step.
 

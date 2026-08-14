@@ -31,7 +31,7 @@ def test_registered_routes(monkeypatch):
     0.141 `include_router` leaves an `_IncludedRouter` wrapper there, which carries no
     `.path`. The schema is the public view of what the app actually serves."""
     module = import_main(monkeypatch, DATABASE_URL)
-    assert set(module.app.openapi()['paths']) == {'/tenants', '/health'}
+    assert set(module.app.openapi()['paths']) == {'/health'}
 
 
 def test_entrypoint_holds_no_engine(monkeypatch):
