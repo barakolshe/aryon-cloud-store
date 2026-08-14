@@ -1,15 +1,18 @@
 """The closure table: one row for every ancestor-descendant pair in the hierarchy.
 
-A parent_id column would make reads a recursive CTE whose cost grows with depth. Storing
-the transitive closure instead -- every ancestor of a node, not just its parent, with the
-number of edges between them -- turns "fetch this node and everything under it" into a
-single indexed lookup on `ancestor_id`. The trade is on writes: moving a subtree
-recomputes O(nodes x depth) rows. Reads were chosen as the hot path.
+Reading a subtree out of a parent_id column means a recursive CTE, and the cost is not the
+recursion -- it is that Postgres always materialises a recursive CTE and sizes it with a
+hardcoded guess of ten iterations. Measured against a synthetic 100k-node tree, the planner
+estimated 201 rows for every subtree asked of it, whether the answer was 2 rows or 34,464,
+and touched 86,259 buffers to return the large one. The same read from a closure table
+estimated 35,458 against an actual 34,464 and touched 371 buffers: one range scan on
+`ancestor_id` in place of one index probe per row returned, and -- the part that matters
+once this is joined against anything else -- a row count the planner can actually plan on.
 
-Every node also gets a depth-0 row pointing at itself, written by the POST path rather
-than by the migration. It is what makes "this node exists" distinguishable from "this node
-has no descendants" -- without it a leaf and a missing id both come back as zero rows, and
-GET could not tell a 200 from a 404.
+The trade lands on writes: re-parenting rewrites the closure rows of every node in the
+moved subtree, up to |subtree| x |ancestors| of them. A move between siblings changes one
+ancestor per descendant; a move across trees changes all of them. Reads were chosen as the
+hot path.
 """
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -37,10 +40,15 @@ class NodeClosure(Base):
     depth: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
-        # >= 0 rather than > 0: depth 0 is the self-row every node carries.
+        # >= 0 rather than > 0 because every node carries a depth-0 row pointing at
+        # itself, written by the POST path. That self-row is what lets one query do the
+        # whole read: `WHERE ancestor_id = :id` returns the node together with its
+        # descendants, so the root needs no separate fetch and no UNION. Answering 404 is
+        # a side benefit, not the reason -- `SELECT 1 FROM nodes` would do that alone.
         CheckConstraint('depth >= 0', name='ck_node_closure_depth_non_negative'),
-        # Covers the read query, which filters on descendant_id and depth to find a
-        # node's parent; the primary key already covers lookups by ancestor_id.
+        # Covers the lookups that start from the descendant rather than the ancestor: the
+        # read path's parent lookup (depth = 1) and the write path's capture of a node's
+        # current ancestors (depth > 0). The primary key already covers ancestor_id.
         Index('ix_closure_descendant_depth', 'descendant_id', 'depth'),
         # At most one depth-1 row per node means at most one parent, so the stored graph
         # can only ever be a forest. Data integrity the README asks for, enforced by
