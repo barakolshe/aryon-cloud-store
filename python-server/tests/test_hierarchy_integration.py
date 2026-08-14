@@ -1,19 +1,15 @@
 """Covers GET /hierarchy/{node_id} end to end, against the compose Postgres.
 
 The whole path runs: the real router, the real controller, the real query, the migrated
-schema. Rows are seeded directly because POST /hierarchy does not exist yet -- seeding is
-this suite's stand-in for the write path, and it goes in as plain SQL rather than through
-the models so the read is tested against what the database holds, not against the same
-objects that produced it.
+schema. Rows are seeded as plain SQL rather than by posting them, so the read is tested
+against what the database holds rather than against the same objects that produced it --
+a bug shared by the write path and the read path would otherwise cancel out and pass.
+POST has its own coverage in test_hierarchy_write_integration.py.
 """
-import importlib
 import json
 
-import pytest
 from hierarchy_fixtures import closure_rows, load_fixture, subtree_rows
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 INSERT_NODE = text(
     # The cast is not decoration: psycopg sends a Python str as text, and Postgres has no
@@ -37,32 +33,6 @@ async def seed(engine, hierarchy):
     async with engine.begin() as connection:
         await connection.execute(INSERT_NODE, nodes)
         await connection.execute(INSERT_CLOSURE, closure)
-
-
-def build_client(engine):
-    """The application, with its session dependency pointed at the test database.
-
-    Both modules are imported here rather than at the top of the file so they come from the
-    same generation: conftest drops the `app.*` tree around every test, and overriding a
-    `get_session` from an older import would leave the endpoint talking to the real engine.
-    """
-    main = importlib.import_module('app.main')
-    database = importlib.import_module('app.database')
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def session_from_the_test_engine():
-        async with session_factory() as session:
-            yield session
-
-    app = main.create_app()
-    app.dependency_overrides[database.get_session] = session_from_the_test_engine
-    return AsyncClient(transport=ASGITransport(app=app), base_url='http://test')
-
-
-@pytest.fixture
-async def client(database_engine):
-    async with build_client(database_engine) as client:
-        yield client
 
 
 async def test_a_stored_hierarchy_comes_back_identical(database_engine, client):

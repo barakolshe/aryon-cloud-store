@@ -6,6 +6,7 @@ these helpers describe what the database should contain, independently of the co
 it there.
 """
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -69,5 +70,31 @@ def closure_rows(hierarchy: dict[str, Any]) -> list[ClosureRow]:
             for depth, ancestor in enumerate(reversed(chain))
         )
         pending.extend((child, chain) for child in node['children'])
+
+    return rows
+
+
+def closure_from_parent_edges(parents: Mapping[int, int | None]) -> set[ClosureRow]:
+    """The closure a `{node_id: parent_id}` map implies -- every row, and no others.
+
+    The independent oracle for the write path's post-condition. `nodes.parent_id` is where
+    the shape is stored and `node_closure` is derived from it, but nothing in the schema can
+    check that the two agree; comparing the stored closure against this rebuild is what
+    turns "the write path keeps them consistent" into something a test can fail on.
+
+    Deliberately re-derived from the parent column alone rather than from the payload, so a
+    write path that got both representations wrong in the same way still gets caught by the
+    tests that compare a fetch against its source file.
+    """
+    rows: set[ClosureRow] = set()
+
+    for node_id in parents:
+        rows.add(ClosureRow(node_id, node_id, 0))
+        ancestor = parents[node_id]
+        depth = 1
+        while ancestor is not None:
+            rows.add(ClosureRow(ancestor, node_id, depth))
+            ancestor = parents[ancestor]
+            depth += 1
 
     return rows
