@@ -55,19 +55,22 @@ def isolate_app_imports():
 
 
 def pytest_asyncio_loop_factories(config, item):
-    """Run the async tests on a selector loop when the developer is on Windows.
+    """Run the async tests on a selector loop, on every platform.
 
     psycopg refuses async mode on asyncio's ProactorEventLoop, which is Windows' default,
     so without this every database test fails at connect with an InterfaceError. The hook
     rather than the `event_loop_policy` fixture: pytest-asyncio 1.4 deprecated overriding
     that fixture and no longer builds its loops from the policy.
 
-    Nothing about the server changes -- it runs on Linux in the container, where this
-    returns the loop asyncio would have picked anyway.
+    Unconditional rather than branching on `sys.platform`, because on Unix this *is* the
+    loop asyncio would have picked -- so naming it costs nothing there and keeps both
+    platforms running the tests on the same loop implementation. The branch this replaces
+    returned `asyncio.EventLoop` off Windows, which does not exist before Python 3.13, and
+    the Windows arm returned before ever evaluating it. The suite therefore passed on a
+    Windows checkout while dying at collection with AttributeError on any Linux one, which
+    is the sort of break a project with no CI only finds when someone else clones it.
     """
-    if sys.platform == 'win32':
-        return {'selector': asyncio.SelectorEventLoop}
-    return {'default': asyncio.EventLoop}
+    return {'selector': asyncio.SelectorEventLoop}
 
 
 def run_on_a_selector_loop(coroutine, **runner_arguments):
