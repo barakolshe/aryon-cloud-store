@@ -1,21 +1,18 @@
 """Covers the two pure halves of the write path in app/lib/hierarchy.py.
 
-No database and no event loop. `flatten_payload` and `closure_rows` are what decide the
-rows the transaction writes, so getting them under test without a connection is what makes
-the interesting cases -- ordering, depth arithmetic, a subtree grafted under existing
-ancestors -- cheap enough to state exhaustively.
+No database, no event loop, and no repository. `flatten_payload` and `closure_rows` are what
+decide the rows the transaction writes, so getting them under test without a connection is
+what makes the interesting cases -- ordering, depth arithmetic, a subtree grafted under
+existing ancestors -- cheap enough to state exhaustively. Both are static methods, so they
+are called on the class: neither depends on anything a service instance holds.
 """
 import pytest
 from hierarchy_fixtures import closure_rows as closure_rows_of_fixture
 from hierarchy_fixtures import load_fixture
 
-from app.lib.hierarchy import (
-    ClosureRow,
-    InvalidHierarchy,
-    closure_rows,
-    flatten_payload,
-)
+from app.lib.hierarchy import HierarchyService, InvalidHierarchy
 from app.lib.types.node import HierarchyNode, NodeType
+from app.lib.types.rows import AncestorRow, ClosureRow
 
 FIXTURE_NAMES = ['1', '2', '3', '4', '5', '6']
 
@@ -41,7 +38,7 @@ def construct_chain(depth):
 def test_a_payload_flattens_parents_before_children():
     """The property the closure pass and the upsert both rely on, asserted directly rather
     than inferred from the row order below: no node appears before its own parent."""
-    nodes = flatten_payload(payload('5'))
+    nodes = HierarchyService.flatten_payload(payload('5'))
 
     seen = set()
     for node in nodes:
@@ -51,7 +48,7 @@ def test_a_payload_flattens_parents_before_children():
 
 
 def test_flattening_reports_each_node_with_its_parent_and_depth():
-    nodes = flatten_payload(payload('3'))
+    nodes = HierarchyService.flatten_payload(payload('3'))
 
     assert [(node.id, node.parent_id, node.depth) for node in nodes] == [
         (1, None, 0),
@@ -66,7 +63,7 @@ def test_flattening_reports_each_node_with_its_parent_and_depth():
 def test_flattening_orders_each_level_by_id():
     """Siblings come out ascending whatever order the payload listed them in -- the same
     order the read path returns, so a re-post cannot reshuffle a stored tree."""
-    nodes = flatten_payload(
+    nodes = HierarchyService.flatten_payload(
         HierarchyNode.model_validate(
             {
                 'id': 1,
@@ -86,7 +83,7 @@ def test_flattening_orders_each_level_by_id():
 def test_the_posted_root_reports_no_parent():
     """None means "the payload did not say", not "this is a root" -- the controller
     substitutes whatever the root currently hangs from."""
-    nodes = flatten_payload(payload('5'))
+    nodes = HierarchyService.flatten_payload(payload('5'))
 
     assert nodes[0].id == 1
     assert nodes[0].parent_id is None
@@ -107,7 +104,7 @@ def test_an_id_repeated_across_branches_is_rejected():
     )
 
     with pytest.raises(InvalidHierarchy, match='2'):
-        flatten_payload(duplicated)
+        HierarchyService.flatten_payload(duplicated)
 
 
 def test_a_hierarchy_deeper_than_the_recursion_limit_flattens():
@@ -122,7 +119,7 @@ def test_a_hierarchy_deeper_than_the_recursion_limit_flattens():
     """
     depth = 1500
 
-    nodes = flatten_payload(construct_chain(depth))
+    nodes = HierarchyService.flatten_payload(construct_chain(depth))
 
     assert len(nodes) == depth
     assert nodes[-1].depth == depth - 1
@@ -133,7 +130,9 @@ def test_closure_rows_handle_a_hierarchy_deeper_than_the_recursion_limit():
     up from each node, so it neither recurses nor re-walks."""
     depth = 1200
 
-    rows = closure_rows(flatten_payload(construct_chain(depth)), [])
+    rows = HierarchyService.closure_rows(
+        HierarchyService.flatten_payload(construct_chain(depth)), []
+    )
 
     # A chain of n nodes has one row per (ancestor, descendant) pair plus one self-row each.
     assert len(rows) == depth * (depth + 1) // 2
@@ -145,7 +144,7 @@ def test_a_root_payload_produces_exactly_the_closure_of_its_own_shape(name):
     """Cross-checked against `hierarchy_fixtures.closure_rows`, which walks the nesting
     directly. Two independent derivations of the same set: this one from the flattened rows
     and a carried ancestor list, that one from the nesting itself."""
-    rows = closure_rows(flatten_payload(payload(name)), [])
+    rows = HierarchyService.closure_rows(HierarchyService.flatten_payload(payload(name)), [])
 
     assert set(rows) == set(closure_rows_of_fixture(load_fixture(name)))
 
@@ -154,7 +153,7 @@ def test_a_root_payload_produces_exactly_the_closure_of_its_own_shape(name):
 def test_no_closure_row_is_emitted_twice(name):
     """`node_closure` has a primary key on (ancestor_id, descendant_id), so a duplicate here
     would be an IntegrityError at the bulk insert rather than a wrong answer."""
-    rows = closure_rows(flatten_payload(payload(name)), [])
+    rows = HierarchyService.closure_rows(HierarchyService.flatten_payload(payload(name)), [])
 
     assert len(rows) == len(set(rows))
 
@@ -162,9 +161,9 @@ def test_no_closure_row_is_emitted_twice(name):
 def test_every_node_gets_a_depth_zero_self_row():
     """What makes "node exists" distinguishable from "node has no descendants", and so what
     lets the read answer 404 rather than an empty object."""
-    nodes = flatten_payload(payload('5'))
+    nodes = HierarchyService.flatten_payload(payload('5'))
 
-    rows = closure_rows(nodes, [])
+    rows = HierarchyService.closure_rows(nodes, [])
 
     assert {row.descendant_id for row in rows if row.depth == 0} == {node.id for node in nodes}
 
@@ -181,7 +180,9 @@ def test_captured_ancestors_are_offset_by_each_node_s_depth_in_the_payload():
         }
     )
 
-    rows = closure_rows(flatten_payload(posted), [(1, 2), (5, 1)])
+    rows = HierarchyService.closure_rows(
+        HierarchyService.flatten_payload(posted), [AncestorRow(1, 2), AncestorRow(5, 1)]
+    )
 
     assert set(rows) == {
         ClosureRow(10, 10, 0),
@@ -199,6 +200,6 @@ def test_captured_ancestors_are_offset_by_each_node_s_depth_in_the_payload():
 def test_a_payload_with_no_captured_ancestors_stores_as_a_root():
     """Nothing above the posted root means no rows naming it as a descendant beyond its own
     self-row -- which is what a root looks like in the closure."""
-    rows = closure_rows(flatten_payload(payload('1')), [])
+    rows = HierarchyService.closure_rows(HierarchyService.flatten_payload(payload('1')), [])
 
     assert rows == [ClosureRow(142, 142, 0)]

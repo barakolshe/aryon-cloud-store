@@ -124,12 +124,12 @@ async def test_the_handler_is_registered_on_the_app_not_the_route(monkeypatch):
     its own, and without this test touching the hierarchy endpoints at all.
     """
     monkeypatch.setenv('DATABASE_URL', 'postgresql://aryon:aryon@postgres:5432/aryondb')
-    controllers = importlib.import_module('app.lib.hierarchy')
+    hierarchy = importlib.import_module('app.lib.hierarchy')
     app = importlib.import_module('app.api.main').create_app()
 
     @app.get('/a-route-invented-by-this-test')
     async def raise_invalid_hierarchy() -> None:
-        raise controllers.InvalidHierarchy('Node 7 is already an ancestor of 3')
+        raise hierarchy.InvalidHierarchy('Node 7 is already an ancestor of 3')
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
         response = await client.get('/a-route-invented-by-this-test')
@@ -175,16 +175,24 @@ async def post_giving_node_2_a_second_parent(client, monkeypatch):
     row breaks no foreign key and no other rule, which leaves the partial unique index as
     the only thing that can refuse it.
     """
-    controllers = importlib.import_module('app.lib.hierarchy')
-    correct_closure_rows = controllers.closure_rows
+    hierarchy = importlib.import_module('app.lib.hierarchy')
+    row_types = importlib.import_module('app.lib.types.rows')
+    correct_closure_rows = hierarchy.HierarchyService.closure_rows
 
     def with_a_second_parent_for_node_2(nodes, captured_ancestors):
         return [
             *correct_closure_rows(nodes, captured_ancestors),
-            controllers.ClosureRow(ancestor_id=3, descendant_id=2, depth=1),
+            row_types.ClosureRow(ancestor_id=3, descendant_id=2, depth=1),
         ]
 
-    monkeypatch.setattr(controllers, 'closure_rows', with_a_second_parent_for_node_2)
+    # Wrapped in `staticmethod` because that is what it replaces: `store_hierarchy` reaches
+    # the computation through `self`, so a plain function patched onto the class would be
+    # bound and would receive the service as its first argument.
+    monkeypatch.setattr(
+        hierarchy.HierarchyService,
+        'closure_rows',
+        staticmethod(with_a_second_parent_for_node_2),
+    )
 
     return await client.post(
         '/hierarchy',
