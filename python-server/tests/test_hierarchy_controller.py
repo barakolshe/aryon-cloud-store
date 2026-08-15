@@ -1,14 +1,15 @@
 """Covers the tree assembly in app/lib/hierarchy.py.
 
-No database and no event loop: `assemble_tree` is a pure function over the rows the
-repository returns, which is what makes the interesting cases -- ordering, a leaf, a
-hierarchy deeper than Python's recursion limit -- cheap to state.
+No database, no event loop, and no repository: `assemble_tree` is a static method over the
+rows a repository returns, which is what makes the interesting cases -- ordering, a leaf, a
+hierarchy deeper than Python's recursion limit -- cheap to state. Reached through the class
+rather than an instance, since it depends on nothing an instance holds.
 """
 import json
 
 from hierarchy_fixtures import SubtreeRow, load_fixture, subtree_rows
 
-from app.lib.hierarchy import assemble_tree
+from app.lib.hierarchy import HierarchyService
 
 
 def test_assembles_a_stored_hierarchy_back_into_the_posted_shape():
@@ -17,7 +18,7 @@ def test_assembles_a_stored_hierarchy_back_into_the_posted_shape():
     back to the file byte for byte."""
     hierarchy = load_fixture('5')
 
-    assembled = assemble_tree(subtree_rows(hierarchy, None))
+    assembled = HierarchyService.assemble_tree(subtree_rows(hierarchy, None))
 
     assert json.dumps(assembled.model_dump(mode='json'), sort_keys=True) == json.dumps(
         hierarchy, sort_keys=True
@@ -25,7 +26,7 @@ def test_assembles_a_stored_hierarchy_back_into_the_posted_shape():
 
 
 def test_a_leaf_carries_an_explicit_empty_children_list():
-    assembled = assemble_tree(subtree_rows(load_fixture('1'), None))
+    assembled = HierarchyService.assemble_tree(subtree_rows(load_fixture('1'), None))
 
     assert assembled.model_dump(mode='json') == {
         'id': 142,
@@ -37,7 +38,7 @@ def test_a_leaf_carries_an_explicit_empty_children_list():
 def test_no_rows_means_no_such_node():
     """A stored node always has its own depth-0 closure row, so an empty read cannot mean
     "a node with nothing under it" -- it is what the route turns into a 404."""
-    assert assemble_tree([]) is None
+    assert HierarchyService.assemble_tree([]) is None
 
 
 def test_children_follow_the_order_of_the_rows():
@@ -51,7 +52,7 @@ def test_children_follow_the_order_of_the_rows():
         SubtreeRow(4, 'subscription', 1, 1),
     ]
 
-    assembled = assemble_tree(rows)
+    assembled = HierarchyService.assemble_tree(rows)
 
     assert [child.id for child in assembled.children] == [2, 3, 4]
 
@@ -68,7 +69,7 @@ def test_siblings_under_different_parents_stay_with_their_own_parent():
         SubtreeRow(6, 'resource_group', 3, 2),
     ]
 
-    assembled = assemble_tree(rows)
+    assembled = HierarchyService.assemble_tree(rows)
 
     children = {child.id: [grandchild.id for grandchild in child.children] for child in assembled.children}
     assert children == {2: [5], 3: [4, 6]}
@@ -84,7 +85,7 @@ def test_a_hierarchy_deeper_than_the_recursion_limit_assembles():
         for node_id in range(2, depth + 1)
     )
 
-    assembled = assemble_tree(rows)
+    assembled = HierarchyService.assemble_tree(rows)
 
     walked = 0
     node = assembled
